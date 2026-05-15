@@ -24,6 +24,13 @@ from typing import Optional, List, Callable
 from .models import JobResult, ReputationProfile, ProviderListing, TransactionReceipt
 from .exceptions import InsufficientFundsError, NoProvidersError, PoCFailedError, PaymentError
 
+# Optional: pass a WalletAuth instance to MyAIClient for wallet-based auth.
+try:
+    from .auth.wallet_auth import WalletAuth as _WalletAuth
+except ImportError:
+    _WalletAuth = None  # type: ignore
+
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BASE_URL = "http://10.0.0.156:8000"
@@ -41,7 +48,9 @@ class MyAIClient:
         wallet: Optional[str] = None,
         base_url: str = DEFAULT_BASE_URL,
         network: str = "base",
+        auth=None,  # WalletAuth instance (preferred over api_key)
     ):
+        self._auth = auth
         self.api_key = api_key
         self.wallet = wallet
         self.base_url = base_url.rstrip("/")
@@ -49,6 +58,12 @@ class MyAIClient:
         self._headers = {}
         if api_key:
             self._headers["X-API-Key"] = api_key
+
+    async def _auth_headers(self) -> dict:
+        """Return auth headers, preferring WalletAuth over static api_key."""
+        if self._auth is not None:
+            return await self._auth.headers()
+        return dict(self._headers)
 
     async def bid_and_execute(
         self,
